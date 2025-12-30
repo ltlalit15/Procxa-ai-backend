@@ -48,269 +48,143 @@ function isSuperAdmin(req) {
  * Create notification
  */
 async function createNotification(type, message, targetRole, targetUserId = null, licenseId = null) {
-  let connection;
   try {
-    connection = await db.getConnection();
-    await connection.execute(
-      `INSERT INTO notifications (type, message, target_role, target_user_id, related_license_id, created_at) 
+    await sequelize.query(
+      `INSERT INTO notifications 
+       (type, message, target_role, target_user_id, related_license_id, created_at)
        VALUES (?, ?, ?, ?, ?, NOW())`,
-      [type, message, targetRole, targetUserId, licenseId]
+      {
+        replacements: [type, message, targetRole, targetUserId, licenseId],
+        type: QueryTypes.INSERT
+      }
     );
   } catch (error) {
-    console.error('Error creating notification:', error.message);
-  } finally {
-    if (connection) connection.release();
+    console.error("Error creating notification:", error.message);
   }
 }
+
 
 /**
  * POST /api/superadmin/create-admin
  * Create a new Admin user with license (SuperAdmin only)
  */
 exports.createAdmin = async (req, res) => {
-  let connection = null;
   try {
-    // Strict role check - must be SuperAdmin
-    if (!req.user || req.user.userType !== 'superadmin') {
-      return res.status(403).json({
-        status: false,
-        message: 'SuperAdmin access required'
-      });
+    if (!req.user || req.user.userType !== "superadmin") {
+      return res.status(403).json({ status: false, message: "SuperAdmin access required" });
     }
 
     const { email, password, startDate, expiryDate, licensePeriodDays } = req.body;
 
-    // Validate required fields
     if (!email || !password) {
-      return res.status(400).json({
-        status: false,
-        message: 'Email and password are required'
-      });
+      return res.status(400).json({ status: false, message: "Email and password required" });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ where: { email_id: email.trim() } });
-    if (existingUser) {
-      return res.status(400).json({
-        status: false,
-        message: 'User with this email already exists'
-      });
+    const exists = await User.findOne({ where: { email_id: email.trim() } });
+    if (exists) {
+      return res.status(400).json({ status: false, message: "User already exists" });
     }
 
-    connection = await db.getConnection();
-
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Calculate dates
-    const start = startDate ? new Date(startDate) : new Date();
+    const newUser = await User.create({
+      email_id: email.trim(),
+      password: hashedPassword,
+      userType: "admin",
+      is_active: true
+    });
+
+    // expiry calculation
     let expiry = null;
-    
+    const start = startDate ? new Date(startDate) : new Date();
+
     if (expiryDate) {
-      expiry = new Date(expiryDate + 'T23:59:59');
+      expiry = new Date(expiryDate + "T23:59:59");
     } else if (licensePeriodDays) {
       expiry = new Date(start);
       expiry.setDate(expiry.getDate() + parseInt(licensePeriodDays));
       expiry.setHours(23, 59, 59, 0);
     }
 
-    // Create user
-    const newUser = await User.create({
-      email_id: email.trim(),
-      password: hashedPassword,
-      userType: 'admin',
-      is_active: true
+    // unique license key
+    let licenseKey;
+    for (let i = 0; i < 10; i++) {
+      licenseKey = generateLicenseKey();
+      const existing = await License.findOne({ where: { license_key: licenseKey } });
+      if (!existing) break;
+    }
+
+    const license = await License.create({
+      admin_id: newUser.id,
+      license_key: licenseKey,
+      assigned_email: email.trim(),
+      status: "active",
+      is_active: true,
+      expiry_date: expiry
     });
 
-    // Generate license key
-    let licenseKey;
-    let isUnique = false;
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (!isUnique && attempts < maxAttempts) {
-      licenseKey = generateLicenseKey();
-      const [existing] = await connection.execute(
-        'SELECT * FROM licenses WHERE license_key = ?',
-        [licenseKey]
-      );
-      if (existing.length === 0) {
-        isUnique = true;
-      }
-      attempts++;
-    }
-
-    if (!isUnique) {
-      return res.status(500).json({
-        status: false,
-        message: 'Failed to generate unique license key'
-      });
-    }
-
-    // Create license
-    const expiryDateValue = expiry ? expiry.toISOString().slice(0, 19).replace('T', ' ') : null;
-    await connection.execute(
-      `INSERT INTO licenses (admin_id, license_key, assigned_email, status, is_active, expiry_date, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [newUser.id, licenseKey, email.trim(), 'active', true, expiryDateValue]
-    );
-
-    // Get created license for response
-    const [licenses] = await connection.execute(
-      'SELECT * FROM licenses WHERE admin_id = ?',
-      [newUser.id]
-    );
-
-    // Create notification for SuperAdmin
     await createNotification(
-      'admin_created',
+      "admin_created",
       `New admin created: ${email}`,
-      'superadmin',
+      "superadmin",
       null,
-      licenses[0].id
+      license.id
     );
 
     return res.status(200).json({
       status: true,
-      message: 'Admin created successfully',
+      message: "Admin created successfully",
       data: {
-        admin: {
-          id: newUser.id,
-          email: newUser.email_id,
-          userType: newUser.userType
-        },
-        license: {
-          license_key: licenseKey,
-          expiry_date: expiryDateValue,
-          start_date: start.toISOString().slice(0, 19).replace('T', ' ')
-        }
+        admin: newUser,
+        license
       }
     });
 
   } catch (error) {
-    console.error('Create admin error:', error.message);
-    return res.status(500).json({
-      status: false,
-      message: 'An error occurred while creating admin'
-    });
-  } finally {
-    if (connection) connection.release();
+    console.error("Create admin error:", error);
+    return res.status(500).json({ status: false, message: "Internal server error" });
   }
 };
+
 
 /**
  * GET /api/superadmin/admins
  * Get all Admin users with their licenses (SuperAdmin only)
  */
 exports.getAllAdmins = async (req, res) => {
-  let connection = null;
   try {
-    // Strict role check - must be SuperAdmin
-    if (!req.user) {
-      return res.status(401).json({
-        status: false,
-        message: 'Authentication required'
-      });
+    if (!req.user || req.user.userType !== "superadmin") {
+      return res.status(403).json({ status: false, message: "SuperAdmin access required" });
     }
 
-    if (req.user.userType !== 'superadmin') {
-      return res.status(403).json({
-        status: false,
-        message: 'SuperAdmin access required. You do not have permission to view all admins.'
-      });
-    }
+    const admins = await sequelize.query(
+      `
+      SELECT 
+        u.id,
+        u.email_id,
+        u.is_active as user_active,
+        l.id as license_id,
+        l.license_key,
+        l.status,
+        l.is_active as license_active,
+        l.expiry_date,
+        DATEDIFF(l.expiry_date, NOW()) as days_remaining
+      FROM users u
+      LEFT JOIN licenses l ON u.id = l.admin_id
+      WHERE u.userType = 'admin'
+      ORDER BY u.id DESC
+      `,
+      { type: QueryTypes.SELECT }
+    );
 
-    try {
-      connection = await db.getConnection();
-    } catch (dbError) {
-      console.error('Database connection error:', dbError);
-      return res.status(500).json({
-        status: false,
-        message: 'Database connection failed. Please try again later.'
-      });
-    }
-
-    // Get all admin users with their licenses
-    // Handle both boolean and tinyint(1) for is_active
-    let admins;
-    try {
-      [admins] = await connection.execute(
-        `SELECT 
-          u.id,
-          u.email_id,
-          u.is_active as user_active,
-          l.id as license_id,
-          l.license_key,
-          l.status as license_status,
-          l.is_active as license_active,
-          l.expiry_date,
-          l.created_at as license_created_at,
-          l.updated_at as license_updated_at,
-          CASE 
-            WHEN l.expiry_date IS NULL THEN NULL
-            WHEN l.expiry_date > NOW() THEN DATEDIFF(l.expiry_date, NOW())
-            ELSE -1
-          END as days_remaining
-        FROM users u
-        LEFT JOIN licenses l ON u.id = l.admin_id
-        WHERE u.userType = 'admin'
-        ORDER BY u.id DESC`
-      );
-    } catch (queryError) {
-      console.error('Query error:', queryError);
-      return res.status(500).json({
-        status: false,
-        message: 'Error fetching admins. Please try again later.'
-      });
-    }
-
-    // Format response - handle both boolean and numeric values
-    const formattedAdmins = (admins || []).map(admin => {
-      // Handle boolean conversion safely
-      const userActive = admin.user_active === 1 || admin.user_active === true || admin.user_active === '1';
-      const licenseActive = admin.license_active === 1 || admin.license_active === true || admin.license_active === '1';
-      
-      return {
-        id: admin.id,
-        email: admin.email_id,
-        user_active: userActive,
-        license: admin.license_id ? {
-          id: admin.license_id,
-          license_key: admin.license_key,
-          status: admin.license_status,
-          is_active: licenseActive,
-          expiry_date: admin.expiry_date,
-          days_remaining: admin.days_remaining !== null && admin.days_remaining !== undefined ? parseInt(admin.days_remaining) : null,
-          created_at: admin.license_created_at,
-          updated_at: admin.license_updated_at
-        } : null
-      };
-    });
-
-    return res.status(200).json({
-      status: true,
-      data: formattedAdmins,
-      message: 'Admins retrieved successfully'
-    });
+    return res.json({ status: true, data: admins });
 
   } catch (error) {
-    console.error('Get all admins error:', error.message);
-    console.error('Error stack:', error.stack);
-    
-    return res.status(500).json({
-      status: false,
-      message: 'An error occurred while retrieving admins'
-    });
-  } finally {
-    if (connection) {
-      try {
-        connection.release();
-      } catch (releaseError) {
-        console.error('Error releasing connection:', releaseError);
-      }
-    }
+    console.error("Get admins error:", error);
+    return res.status(500).json({ status: false, message: "Server error" });
   }
 };
+
 
 /**
  * PUT /api/superadmin/renew-license/:adminId
@@ -683,60 +557,40 @@ exports.getMyAdminData = async (req, res) => {
  * Get licenses expiring soon (SuperAdmin only)
  */
 exports.getExpiringLicenses = async (req, res) => {
-  let connection = null;
   try {
-    // Strict role check - must be SuperAdmin
-    if (!req.user) {
-      return res.status(401).json({
-        status: false,
-        message: 'Authentication required'
-      });
+    if (!req.user || req.user.userType !== "superadmin") {
+      return res.status(403).json({ status: false, message: "SuperAdmin access required" });
     }
 
-    if (req.user.userType !== 'superadmin') {
-      return res.status(403).json({
-        status: false,
-        message: 'SuperAdmin access required'
-      });
-    }
+    const days = parseInt(req.query.days || 7);
 
-    const daysThreshold = parseInt(req.query.days || 7);
-
-    connection = await db.getConnection();
-
-    // Get licenses expiring within threshold
-    const [licenses] = await connection.execute(
-      `SELECT 
+    const licenses = await sequelize.query(
+      `
+      SELECT 
         u.id as admin_id,
         u.email_id,
-        l.id as license_id,
         l.license_key,
         l.expiry_date,
         DATEDIFF(l.expiry_date, NOW()) as days_remaining
       FROM licenses l
       JOIN users u ON l.admin_id = u.id
-      WHERE l.is_active = TRUE
-      AND l.expiry_date IS NOT NULL
-      AND l.expiry_date > NOW()
-      AND DATEDIFF(l.expiry_date, NOW()) <= ?
-      ORDER BY l.expiry_date ASC`,
-      [daysThreshold]
+      WHERE l.is_active = true
+        AND l.expiry_date IS NOT NULL
+        AND l.expiry_date > NOW()
+        AND DATEDIFF(l.expiry_date, NOW()) <= ?
+      `,
+      {
+        replacements: [days],
+        type: QueryTypes.SELECT
+      }
     );
 
-    return res.status(200).json({
-      status: true,
-      data: licenses,
-      message: 'Expiring licenses retrieved successfully'
-    });
+    return res.json({ status: true, data: licenses });
 
   } catch (error) {
-    console.error('Get expiring licenses error:', error.message);
-    return res.status(500).json({
-      status: false,
-      message: 'An error occurred while retrieving expiring licenses'
-    });
-  } finally {
-    if (connection) connection.release();
+    console.error("Expiring license error:", error);
+    return res.status(500).json({ status: false, message: "Server error" });
   }
 };
+
 
