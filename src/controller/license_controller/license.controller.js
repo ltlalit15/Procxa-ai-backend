@@ -1,4 +1,5 @@
-const pool = require('../../utils/mysql2Connection');
+
+const db = require("../../../config/config");
 const jwt = require('jsonwebtoken');
 const accessSecretKey = process.env.ACCESS_SECRET_KEY;
 
@@ -84,7 +85,7 @@ exports.activateLicense = async (req, res) => {
 
     // Get database connection
     try {
-      connection = await pool.getConnection();
+      connection = await db.getConnection();
     } catch (dbError) {
       console.error('Database connection error:', dbError);
       return res.status(500).json({
@@ -281,7 +282,7 @@ exports.validateLicense = async (req, res) => {
       });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Check for active license linked to admin_id (preferred) or assigned_email
     // First try to find user by email to get admin_id
@@ -375,7 +376,7 @@ exports.verifyLicense = async (req, res) => {
       });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Check if license exists
     const [licenses] = await connection.execute(
@@ -446,7 +447,7 @@ exports.generateLicense = async (req, res) => {
 
     const { expiryDate } = req.query; // Optional expiry date
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Generate unique license key
     let licenseKey;
@@ -539,7 +540,7 @@ exports.getAllLicenses = async (req, res) => {
     }
 
     try {
-      connection = await pool.getConnection();
+      connection = await db.getConnection();
     } catch (dbError) {
       console.error('Database connection error:', dbError);
       return res.status(500).json({
@@ -626,7 +627,7 @@ exports.toggleLicenseStatus = async (req, res) => {
     }
 
     try {
-      connection = await pool.getConnection();
+      connection = await db.getConnection();
     } catch (dbError) {
       console.error('Database connection error:', dbError);
       return res.status(500).json({
@@ -736,7 +737,7 @@ exports.updateExpiryDate = async (req, res) => {
     }
 
     try {
-      connection = await pool.getConnection();
+      connection = await db.getConnection();
     } catch (dbError) {
       console.error('Database connection error:', dbError);
       return res.status(500).json({

@@ -3,7 +3,7 @@ const User = db.user;
 const Department = db.department;
 const bcrypt = require("bcryptjs");
 const tokenProcess = require("../../services/generateToken");
-const pool = require("../../utils/mysql2Connection");
+// const pool = require("../../utils/mysql2Connection");
 
 exports.login = async (req, res) => {
     try {
@@ -103,7 +103,7 @@ exports.login = async (req, res) => {
         if (users.userType === 'admin') {
             let connection;
             try {
-                connection = await pool.getConnection();
+                connection = await db.getConnection();
                 
                 // Check for active license linked to this admin
                 const [licenses] = await connection.execute(

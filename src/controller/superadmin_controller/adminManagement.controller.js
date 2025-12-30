@@ -1,7 +1,6 @@
 const db = require("../../../config/config");
 const User = db.user;
 const bcrypt = require("bcryptjs");
-const pool = require("../../utils/mysql2Connection");
 const jwt = require('jsonwebtoken');
 const accessSecretKey = process.env.ACCESS_SECRET_KEY;
 
@@ -51,7 +50,7 @@ function isSuperAdmin(req) {
 async function createNotification(type, message, targetRole, targetUserId = null, licenseId = null) {
   let connection;
   try {
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
     await connection.execute(
       `INSERT INTO notifications (type, message, target_role, target_user_id, related_license_id, created_at) 
        VALUES (?, ?, ?, ?, ?, NOW())`,
@@ -98,7 +97,7 @@ exports.createAdmin = async (req, res) => {
       });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -222,7 +221,7 @@ exports.getAllAdmins = async (req, res) => {
     }
 
     try {
-      connection = await pool.getConnection();
+      connection = await db.getConnection();
     } catch (dbError) {
       console.error('Database connection error:', dbError);
       return res.status(500).json({
@@ -338,7 +337,7 @@ exports.renewLicense = async (req, res) => {
       });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Get admin and license
     const [admins] = await connection.execute(
@@ -450,7 +449,7 @@ exports.toggleAdmin = async (req, res) => {
       });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Get admin
     const admin = await User.findOne({ where: { id: adminId, userType: 'admin' } });
@@ -518,7 +517,7 @@ exports.updateExpiry = async (req, res) => {
       });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Get license
     const [licenses] = await connection.execute(
@@ -587,7 +586,7 @@ exports.getMyAdminData = async (req, res) => {
     }
 
     try {
-      connection = await pool.getConnection();
+      connection = await db.getConnection();
     } catch (dbError) {
       console.error('Database connection error:', dbError);
       return res.status(500).json({
@@ -703,7 +702,7 @@ exports.getExpiringLicenses = async (req, res) => {
 
     const daysThreshold = parseInt(req.query.days || 7);
 
-    connection = await pool.getConnection();
+    connection = await db.getConnection();
 
     // Get licenses expiring within threshold
     const [licenses] = await connection.execute(

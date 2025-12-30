@@ -31,7 +31,7 @@ const sequelize = new Sequelize(
       connectTimeout: 60000, // 60 sec
     },
 
-    pool: {
+    db: {
       max: 5,
       min: 0,
       acquire: 60000,
