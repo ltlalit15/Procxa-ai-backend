@@ -26,11 +26,25 @@ app.use(cookieParser());
 // }));
 
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://procxa.netlify.app"
+];
+
 app.use(cors({
   credentials: true,
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Refresh-Token']
+  origin: function (origin, callback) {
+    // Allow requests with no origin (Postman, curl, mobile apps)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("CORS not allowed from this origin"));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Refresh-Token']
 }));
 
 const mainRoutes = require("./src/routes/main.routes")
