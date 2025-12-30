@@ -49,7 +49,7 @@ app.use((err, req, res, next) => {
 });
 
 app.get("/",(req,res)=>{
-    res.send("Hello procxa  web services, Server  is running on port : 7174")
+    res.send("Hello procxa  web services, Server  is running on port : 8080")
 })
 
 app.listen(process.env.PORT,()=>{
