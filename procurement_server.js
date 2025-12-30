@@ -18,11 +18,19 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, "public" )));
 app.use(cookieParser());
 
+// app.use(cors({
+//     credentials: true,
+//     origin : "*",
+//     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+//     allowedHeaders:[ 'Content-Type','Authorization', 'X-Refresh-Token']
+// }));
+
+
 app.use(cors({
-    credentials: true,
-    origin : "*",
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders:[ 'Content-Type','Authorization', 'X-Refresh-Token']
+  credentials: true,
+  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-Refresh-Token']
 }));
 
 const mainRoutes = require("./src/routes/main.routes")
