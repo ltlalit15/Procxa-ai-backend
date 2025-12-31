@@ -1,5 +1,4 @@
-// const db = require('../../utils/mysql2Connection');
-const db = require("../../../config/config");
+const pool = require('../../utils/mysql2Connection');
 const jwt = require('jsonwebtoken');
 const accessSecretKey = process.env.ACCESS_SECRET_KEY;
 
@@ -26,7 +25,7 @@ const validateLicense = async (req, res, next) => {
 
     // Admin users must have valid license
     if (user.userType === 'admin') {
-      const connection = await db.getConnection();
+      const connection = await pool.getConnection();
       
       try {
         // Check for active license linked to this admin

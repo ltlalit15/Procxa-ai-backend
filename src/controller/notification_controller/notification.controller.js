@@ -1,4 +1,4 @@
-const db = require("../../../config/config");
+const pool = require('../../utils/mysql2Connection');
 const jwt = require('jsonwebtoken');
 const accessSecretKey = process.env.ACCESS_SECRET_KEY;
 
@@ -39,7 +39,7 @@ exports.getNotifications = async (req, res) => {
       });
     }
 
-    connection = await db.getConnection();
+    connection = await pool.getConnection();
 
     // Get notifications based on role
     let query, params;
@@ -96,7 +96,7 @@ exports.markAsRead = async (req, res) => {
 
     const { id } = req.params;
 
-    connection = await db.getConnection();
+    connection = await pool.getConnection();
 
     await connection.execute(
       'UPDATE notifications SET is_read = TRUE WHERE id = ?',
@@ -134,7 +134,7 @@ exports.getUnreadCount = async (req, res) => {
       });
     }
 
-    connection = await db.getConnection();
+    connection = await pool.getConnection();
 
     let query, params;
     if (user.type === 'superadmin') {
