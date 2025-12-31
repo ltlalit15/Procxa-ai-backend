@@ -18,35 +18,11 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, "public" )));
 app.use(cookieParser());
 
-// app.use(cors({
-//     credentials: true,
-//     origin : "*",
-//     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-//     allowedHeaders:[ 'Content-Type','Authorization', 'X-Refresh-Token']
-// }));
-
-
-
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://procxa.netlify.app"
-];
-
 app.use(cors({
-  credentials: true,
-  origin: function (origin, callback) {
-    // Allow requests with no origin (Postman, curl, mobile apps)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error("CORS not allowed from this origin"));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Refresh-Token']
+    credentials: true,
+    origin : "*",
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    allowedHeaders:[ 'Content-Type','Authorization', 'X-Refresh-Token']
 }));
 
 const mainRoutes = require("./src/routes/main.routes")
@@ -64,12 +40,15 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-app.get("/",(req,res)=>{
-    res.send("Hello procxa  web services, Server  is running on port : 7174")
-})
+const PORT = process.env.PORT || 7174;
 
-app.listen(process.env.PORT,()=>{
-    console.log(`Server is running for procxa at port ${process.env.PORT} `);
+app.get("/",(req,res)=>{
+    res.send(`Hello procxa web services, Server is running on port : ${PORT}`)
+})
+app.listen(PORT,()=>{
+    console.log(`Server is running for procxa at port ${PORT} `);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Database Host: ${process.env.DB_HOST || 'not set'}`);
 })
 
 

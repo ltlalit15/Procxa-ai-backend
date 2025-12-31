@@ -8,7 +8,8 @@ const generateAccessToken = (user) => {
         email: user.email_id,
         type: user.userType,
     };
-    return jwt.sign(payload, access_secret_key, { expiresIn: '1m' });
+    // Changed from '1m' to '24h' - 1 minute expiry was causing immediate token expiration in production
+    return jwt.sign(payload, access_secret_key, { expiresIn: '24h' });
 };
 
 const generateRefreshToken = (user) => {
