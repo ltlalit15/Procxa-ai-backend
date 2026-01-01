@@ -18,78 +18,98 @@ const get_spends_details = async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 7;
         const offset = (page - 1) * limit;
 
-        // Extract search filters from query params
-        const { supplierName, transactionDate, categoryName, departmentName } = req.query;
+        // Extract search filters from query params - now using IDs
+        const { supplierId, transactionDate, categoryId, departmentId } = req.query;
 
         // Define the where clause for filtering
         const whereClause = {
             ...adminWhereClause
         };
 
-        // Apply search filters dynamically
+        // Apply ID-based filters directly in where clause
+        if (supplierId) {
+            whereClause.supplierId = supplierId;
+        }
+        if (departmentId) {
+            whereClause.departmentId = departmentId;
+        }
+        if (categoryId) {
+            whereClause.categoryId = categoryId;
+        }
+        if (transactionDate) {
+            whereClause.dateOfTransaction = transactionDate;
+        }
+
+        // Include clauses for related data (always include for display)
         const includeClause = [
             {
                 model: department,
                 as: "department",
                 attributes: ['id', 'name'],
-                where: departmentName ? { name: { [Op.like]: `%${departmentName}%` } } : undefined
             },
             {
                 model: supplier,
                 as: "supplier",
                 attributes: ['id', 'name'],
-                where: supplierName ? { name: { [Op.like]: `%${supplierName}%` } } : undefined
             },
             {
                 model: category,
                 as: "category",
                 attributes: ['id', 'name'],
-                where: categoryName ? { name: { [Op.like]: `%${categoryName}%` } } : undefined
             }
         ];
 
-        // Filter transactions by exact date if provided
-        if (transactionDate) {
-            whereClause.dateOfTransaction = transactionDate;
-        }
-
-        // Fetch transactions with filters
+        // Fetch paginated transactions with filters
         const { rows: transactions, count: totalRecords } = await Transaction.findAndCountAll({
             where: whereClause,
             limit,
             offset,
-            include: includeClause.filter(Boolean) // Remove undefined values
+            include: includeClause
         });
 
-        if (transactions.length === 0) {
-            return res.status(404).json({
-                status: false,
-                message: 'No transactions found',
-                data: [],
-            });
-        }
+        // Calculate summary from full filtered dataset (not paginated)
+        const summaryWhereClause = { ...whereClause };
+        
+        // Get total transaction count
+        const totalSpendCount = await Transaction.count({
+            where: summaryWhereClause
+        });
 
-        // Calculate total transaction amount
-        const totalTransactionAmount = transactions.reduce((acc, transaction) => acc + (transaction.amount || 0), 0);
+        // Get total transaction amount from full filtered dataset
+        const totalAmountResult = await Transaction.findAll({
+            attributes: [
+                [Sequelize.fn('SUM', Sequelize.col('amount')), 'totalAmount']
+            ],
+            where: summaryWhereClause,
+            raw: true
+        });
+        const totalTransactionAmount = parseFloat(totalAmountResult[0]?.totalAmount || 0);
 
-        // Get unique vendor count
-        const uniqueVendors = new Set(transactions.map(transaction => transaction.supplier?.id));
-        const totalVendorCount = uniqueVendors.size; // Count unique vendors
+        // Get unique vendor count from full filtered dataset
+        const uniqueVendorsResult = await Transaction.findAll({
+            attributes: [
+                [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('supplierId'))), 'uniqueVendors']
+            ],
+            where: summaryWhereClause,
+            raw: true
+        });
+        const totalVendorCount = parseInt(uniqueVendorsResult[0]?.uniqueVendors || 0);
 
         const totalPages = Math.ceil(totalRecords / limit);
 
+        // Always return 200 OK, even for empty results
         return res.status(200).json({
             status: true,
-            message: 'Transactions fetched successfully',
+            message: transactions.length > 0 ? 'Transactions fetched successfully' : 'No transactions found',
             data: transactions,
             summary: {
-                totalSpendCount: totalRecords,          // Total transactions count
-                totalTransactionAmount,                // Sum of all transaction amounts
-                totalVendorCount                       // Unique vendor count
+                totalSpendCount,
+                totalTransactionAmount,
+                totalVendorCount
             },
             pagination: {
                 currentPage: page,
-                totalPages,
+                totalPages: totalPages || 1,
                 totalRecords,
                 limit,
             },

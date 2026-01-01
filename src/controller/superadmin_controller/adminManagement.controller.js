@@ -340,11 +340,18 @@ exports.renewLicense = async (req, res) => {
 
     connection = await pool.getConnection();
 
-    // Get admin and license
+    // Get admin and license - alias l.id as license_id to match getAllAdmins format
     const [admins] = await connection.execute(
-      `SELECT u.*, l.* FROM users u
-       LEFT JOIN licenses l ON u.id = l.admin_id
-       WHERE u.id = ? AND u.userType = 'admin'`,
+      `SELECT 
+        u.*, 
+        l.id as license_id,
+        l.license_key,
+        l.expiry_date,
+        l.is_active as license_is_active,
+        l.status as license_status
+      FROM users u
+      LEFT JOIN licenses l ON u.id = l.admin_id
+      WHERE u.id = ? AND u.userType = 'admin'`,
       [adminId]
     );
 
@@ -357,6 +364,7 @@ exports.renewLicense = async (req, res) => {
 
     const admin = admins[0];
 
+    // Check if license exists - use license_id (aliased from l.id)
     if (!admin.license_id) {
       return res.status(400).json({
         status: false,
